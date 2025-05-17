@@ -3,6 +3,7 @@ import numpy as np
 from math import sqrt, floor
 import matplotlib.pyplot as plt
 from PIL import Image
+from scipy.interpolate import CubicSpline
 
 def read_image(path):
     img = cv2.imread(path)  # cv2.IMREAD_GRAYSCALE)
@@ -174,11 +175,43 @@ def lagrange_bicubic_interpolation(img, dimension):
 
     return output
 
+def bicubic_spline_interpolation(image, new_shape):
+    h_in, w_in, c = image.shape
+    h_out, w_out = new_shape
+    scale_x = w_in / w_out
+    scale_y = h_in / h_out
+
+    output = np.zeros((h_out, w_out, c), dtype=np.uint8)
+
+    for channel in range(c):
+        img_channel = image[:, :, channel]
+
+        x_coords = np.arange(w_in)
+
+        interp_rows = []
+        for y in range(h_in):
+            spline_x = CubicSpline(x_coords, img_channel[y, :], bc_type='natural')
+            x_new = np.linspace(0, w_in - 1, w_out)
+            interp_rows.append(spline_x(x_new))
+        interp_rows = np.array(interp_rows)
+
+        y_coords = np.arange(h_in)
+        final_interp = []
+        for x in range(w_out):
+            spline_y = CubicSpline(y_coords, interp_rows[:, x], bc_type='natural')
+            y_new = np.linspace(0, h_in - 1, h_out)
+            final_interp.append(spline_y(y_new))
+        final_interp = np.array(final_interp).T  
+
+        output[:, :, channel] = np.clip(final_interp, 0, 255)
+
+    return output
+
 def main():
     images_list = {}
 
     # Read Image
-    img, size, dimension = read_image("./images/planet.jpg")
+    img, size, dimension = read_image("./images/butterfly.png")
     print(f"Image size is: {size}")
     images_list['Original Image'] = img
 
@@ -232,27 +265,34 @@ def main():
     axs2[3].set_title('256x256 Image with OpenCV\'s Bilinear')
     axs2[3].imshow(bl_img)
 
-    # Bicubic Lagrange Interpolation
+    # Bicubic Interpolation
     lbi_img_algo = lagrange_bicubic_interpolation(resized_img, dimension)
     lbi_img_algo = cv2.cvtColor(np.array(lbi_img_algo, dtype=np.uint8), cv2.COLOR_BGR2RGB)
     lbi_img_algo = Image.fromarray(lbi_img_algo.astype('uint8'))
     lbi_img_algo.save("./images/my_bicubic_lagrange.png")
+
+    bs_img_algo = bicubic_spline_interpolation(resized_img, dimension)
+    bs_img_algo = cv2.cvtColor(np.array(bs_img_algo, dtype=np.uint8), cv2.COLOR_BGR2RGB)
+    bs_img_algo = Image.fromarray(bs_img_algo.astype('uint8'))
+    bs_img_algo.save("./images/my_bicubic_spline.png")
 
     lbi_img = image_change_scale(resized_img, dimension, interpolation=cv2.INTER_CUBIC)
     lbi_img = cv2.cvtColor(np.array(lbi_img), cv2.COLOR_BGR2RGB)
     lbi_img = Image.fromarray(lbi_img.astype('uint8'))
     lbi_img.save("./images/opencv_bicubic.png")
 
-    fig3, axs3 = plt.subplots(1, 4)
+    fig3, axs3 = plt.subplots(1, 5)
     # fig.suptitle('25 Percent of the original size', fontsize=16)
     axs3[0].set_title('Original 256x256 Image')
     axs3[0].imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
     axs3[1].set_title('64x64 Image')
     axs3[1].imshow(cv2.cvtColor(resized_img, cv2.COLOR_BGR2RGB))
-    axs3[2].set_title('256x256 Image with Bicubic Lagrange')
-    axs3[2].imshow(lbi_img_algo)
-    axs3[3].set_title('256x256 Image with OpenCV\'s Bicubic')
-    axs3[3].imshow(lbi_img)
+    axs3[2].set_title('256x256 Image with OpenCV\'s Bicubic')
+    axs3[2].imshow(lbi_img)
+    axs3[3].set_title('256x256 Image with Bicubic Lagrange')
+    axs3[3].imshow(lbi_img_algo)
+    axs3[4].set_title('256x256 Image with Bicubic Spline')
+    axs3[4].imshow(bs_img_algo)
 
     plt.show()
 
