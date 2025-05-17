@@ -126,6 +126,53 @@ def bilinear_interpolation_vectorized(image, dimension):
 
     return output.astype(np.uint8)
 
+def lagrange_weights(x, x_idx):
+    weights = []
+    for i in range(len(x_idx)):
+        xi = x_idx[i]
+        w = 1.0
+        for j in range(len(x_idx)):
+            xj = x_idx[j]
+            if i == j or xi == xj:
+                continue
+            w *= (x - xj) / (xi - xj)
+        weights.append(w)
+    return weights
+
+def lagrange_bicubic_interpolation(img, dimension):
+    h_out, w_out = dimension
+    h_in, w_in, channels = img.shape
+
+    img_padded = np.pad(img, ((1, 2), (1, 2), (0, 0)), mode='edge') 
+
+    scale_x = h_in / h_out
+    scale_y = w_in / w_out
+    output = np.zeros((h_out, w_out, channels), dtype=np.uint8)
+
+    for c in range(channels):
+        for i in range(h_out):
+            for j in range(w_out):
+                x = (i + 0.5) * scale_x - 0.5
+                y = (j + 0.5) * scale_y - 0.5
+                xi = floor(x)
+                yi = floor(y)
+
+                x_idx = [xi - 1 + m + 1 for m in range(4)]
+                y_idx = [yi - 1 + n + 1 for n in range(4)]
+
+                wx = lagrange_weights(x + 1, x_idx)
+                wy = lagrange_weights(y + 1, y_idx)
+
+                value = 0.0
+                for m in range(4):
+                    row_val = 0.0
+                    for n in range(4):
+                        row_val += img_padded[x_idx[m], y_idx[n], c] * wy[n]
+                    value += row_val * wx[m]
+
+                output[i, j, c] = np.clip(value, 0, 255)
+
+    return output
 
 def main():
     images_list = {}
@@ -184,6 +231,29 @@ def main():
     axs2[2].imshow(bl_img_algo)
     axs2[3].set_title('256x256 Image with OpenCV\'s Bilinear')
     axs2[3].imshow(bl_img)
+
+    # Bicubic Lagrange Interpolation
+    lbi_img_algo = lagrange_bicubic_interpolation(resized_img, dimension)
+    lbi_img_algo = cv2.cvtColor(np.array(lbi_img_algo, dtype=np.uint8), cv2.COLOR_BGR2RGB)
+    lbi_img_algo = Image.fromarray(lbi_img_algo.astype('uint8'))
+    lbi_img_algo.save("./images/my_bicubic_lagrange.png")
+
+    lbi_img = image_change_scale(resized_img, dimension, interpolation=cv2.INTER_CUBIC)
+    lbi_img = cv2.cvtColor(np.array(lbi_img), cv2.COLOR_BGR2RGB)
+    lbi_img = Image.fromarray(lbi_img.astype('uint8'))
+    lbi_img.save("./images/opencv_bicubic.png")
+
+    fig3, axs3 = plt.subplots(1, 4)
+    # fig.suptitle('25 Percent of the original size', fontsize=16)
+    axs3[0].set_title('Original 256x256 Image')
+    axs3[0].imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    axs3[1].set_title('64x64 Image')
+    axs3[1].imshow(cv2.cvtColor(resized_img, cv2.COLOR_BGR2RGB))
+    axs3[2].set_title('256x256 Image with Bicubic Lagrange')
+    axs3[2].imshow(lbi_img_algo)
+    axs3[3].set_title('256x256 Image with OpenCV\'s Bicubic')
+    axs3[3].imshow(lbi_img)
+
     plt.show()
 
 if __name__ == "__main__":
