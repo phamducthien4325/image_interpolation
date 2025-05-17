@@ -86,6 +86,47 @@ def bilinear_interpolation(image, dimension):
 
     return new_image
 
+def bilinear_interpolation_vectorized(image, dimension):
+    h_out, w_out = dimension
+    h_in, w_in = image.shape[:2]
+
+    scale_x = w_in / w_out
+    scale_y = h_in / h_out
+
+    grid_x, grid_y = np.meshgrid(np.arange(w_out), np.arange(h_out))
+
+    x = (grid_x + 0.5) * scale_x - 0.5
+    y = (grid_y + 0.5) * scale_y - 0.5
+
+    x0 = np.floor(x).astype(np.int32)
+    y0 = np.floor(y).astype(np.int32)
+
+    x0 = np.clip(x0, 0, w_in - 2)
+    y0 = np.clip(y0, 0, h_in - 2)
+    x1 = x0 + 1
+    y1 = y0 + 1
+
+    x_diff = x - x0
+    y_diff = y - y0
+
+    Ia = image[y0, x0]
+    Ib = image[y0, x1]
+    Ic = image[y1, x0]
+    Id = image[y1, x1]
+
+    wa = (1 - x_diff) * (1 - y_diff)
+    wb = x_diff * (1 - y_diff)
+    wc = (1 - x_diff) * y_diff
+    wd = x_diff * y_diff
+
+    output = (Ia * wa[..., np.newaxis] + 
+              Ib * wb[..., np.newaxis] + 
+              Ic * wc[..., np.newaxis] + 
+              Id * wd[..., np.newaxis])
+
+    return output.astype(np.uint8)
+
+
 def main():
     images_list = {}
 
