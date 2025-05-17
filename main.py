@@ -207,6 +207,58 @@ def bicubic_spline_interpolation(image, new_shape):
 
     return output
 
+def cubic_kernel(t, a=-0.5):
+    t = abs(t)
+    if t <= 1:
+        return (a + 2)*t**3 - (a + 3)*t**2 + 1
+    elif 1 < t < 2:
+        return a*t**3 - 5*a*t**2 + 8*a*t - 4*a
+    else:
+        return 0
+
+def bicubic_convolution_resize(image, new_shape):
+    h_out, w_out = new_shape
+    h_in, w_in, channels = image.shape
+
+    scale_x = w_in / w_out
+    scale_y = h_in / h_out
+
+    output = np.zeros((h_out, w_out, channels), dtype=np.uint8)
+
+    for c in range(channels):
+        for i in range(h_out):
+            for j in range(w_out):
+                x = j * scale_x
+                y = i * scale_y
+
+                x_int = int(np.floor(x))
+                y_int = int(np.floor(y))
+
+                value = 0
+                weight_sum = 0
+
+                for m in range(-1, 3):
+                    for n in range(-1, 3):
+                        xm = min(max(x_int + m, 0), w_in - 1)
+                        yn = min(max(y_int + n, 0), h_in - 1)
+
+                        w_x = cubic_kernel(x - (x_int + m))
+                        w_y = cubic_kernel(y - (y_int + n))
+                        w = w_x * w_y
+
+                        pixel = image[yn, xm, c]
+                        value += pixel * w
+                        weight_sum += w
+
+                if weight_sum != 0:
+                    value /= weight_sum
+                else:
+                    value = 0
+
+                output[i, j, c] = np.clip(value, 0, 255)
+
+    return output
+
 def main():
     images_list = {}
 
@@ -276,12 +328,17 @@ def main():
     bs_img_algo = Image.fromarray(bs_img_algo.astype('uint8'))
     bs_img_algo.save("./images/my_bicubic_spline.png")
 
+    bc_img_algo = bicubic_convolution_resize(resized_img, dimension)
+    bc_img_algo = cv2.cvtColor(np.array(bc_img_algo, dtype=np.uint8), cv2.COLOR_BGR2RGB)
+    bc_img_algo = Image.fromarray(bc_img_algo.astype('uint8'))
+    bc_img_algo.save("./images/my_bicubic_convolution.png")
+
     lbi_img = image_change_scale(resized_img, dimension, interpolation=cv2.INTER_CUBIC)
     lbi_img = cv2.cvtColor(np.array(lbi_img), cv2.COLOR_BGR2RGB)
     lbi_img = Image.fromarray(lbi_img.astype('uint8'))
     lbi_img.save("./images/opencv_bicubic.png")
 
-    fig3, axs3 = plt.subplots(1, 5)
+    fig3, axs3 = plt.subplots(1, 6)
     # fig.suptitle('25 Percent of the original size', fontsize=16)
     axs3[0].set_title('Original 256x256 Image')
     axs3[0].imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
@@ -293,6 +350,8 @@ def main():
     axs3[3].imshow(lbi_img_algo)
     axs3[4].set_title('256x256 Image with Bicubic Spline')
     axs3[4].imshow(bs_img_algo)
+    axs3[5].set_title('256x256 Image with Bicubic Convolution')
+    axs3[5].imshow(bc_img_algo)
 
     plt.show()
 
